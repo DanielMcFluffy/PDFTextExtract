@@ -6,7 +6,7 @@ const extractText = async(pdfUrl: string): Promise<TextContent[]> => {
   const pdf = getDocument(pdfUrl).promise;
   const textContentPromises = [];
   const parsedPdf = await pdf;
-  for (let i = 36; i <= 1000; i++) {
+  for (let i = 36; i <= 132; i++) {
     const page = await parsedPdf.getPage(i);
     const pageContent = await page.getTextContent();
     textContentPromises.push(pageContent)
@@ -33,16 +33,14 @@ const scanPdf = async() => {
 
     const formattedStr = totalStr.join('')
 
-    const regexName = /([A-Z\s]+),,\(([^)]+-[^)]+)\).*?([A-Z\s\/]+),,Prescriber/g;
+    const regexName = /([A-Z\s]+),,\(([^)]+-[^)]+)\).*?([A-Z\s\/]+)(?=((\)*),,)(Prescriber)*)/g;
 
-    const regexDetail = /,,Uses\/Indications,,(.*?)(?=,,Pharmacology\/Actions,,),,Pharmacology\/Actions,,(.*?)(?=,,Pharmacokinetics,,),,Pharmacokinetics,,(.*?)(?=,,Contraindications\/Precautions\/Warnings,,),,Contraindications\/Precautions\/Warnings,,(.*?)(?=,,Adverse Effects,,),,Adverse Effects,,(.*?)(?=,,Reproductive\/Nursing Safety,,),,Reproductive\/Nursing Safety,,(.*?)(?=,,Overdosage\/Acute Toxicity,,)/g;
+    const regexDetail = /(,|,,)*Uses\/Indications(,|,,)*(.*?)(?=,,Pharmacology\/Actions(,|,,)*)(,|,,)*Pharmacology\/Actions(,|,,)*(.*?)(?=,,Pharmacokinetics,(,|,,)*)(,|,,)*Pharmacokinetics(,|,,)*(.*?)(?=,,Contraindications\/Precautions\/Warnings(,|,,)*)(,|,,)*Contraindications\/Precautions\/Warnings(,|,,)*(.*?)(?=,,Adverse Effects(,|,,)*)/g;
 
-    const regexDetail_1 = /,,Uses\/Indications,,(.*?)(?=,,Pharmacology\/Actions,,)/g;
-    const regexDetail_2 = /,,Pharmacology\/Actions,,(.*?)(?=,,Pharmacokinetics,,)/g;
-    const regexDetail_3 = /,,Pharmacokinetics,,(.*?)(?=,,Contraindications\/Precautions\/Warnings,,)/g;
-    const regexDetail_4 = /,,Contraindications\/Precautions\/Warnings,,(.*?)(?=,,Adverse Effects,,)/g;
-    const regexDetail_5 = /,,Adverse Effects,,(.*?)(?=,,Reproductive\/Nursing Safety,,)/g;
-    const regexDetail_6 = /Reproductive\/Nursing Safety,,(.*?)(?=,,Overdosage\/Acute Toxicity,,)/g
+    const regexDetail_1 = /(,|,,)*Uses\/Indications(,|,,)*(.*?)(?=,,Pharmacology\/Actions(,|,,)*)/g;
+    const regexDetail_2 = /(,|,,)*Pharmacology\/Actions(,|,,)*(.*?)(?=,,Pharmacokinetics,(,|,,)*)/g;
+    const regexDetail_3 = /(,|,,)*Pharmacokinetics(,|,,)*(.*?)(?=,,Contraindications\/Precautions\/Warnings(,|,,)*)/g;
+    const regexDetail_4 = /(,|,,)*Contraindications\/Precautions\/Warnings(,|,,)*(.*?)(?=,,Adverse Effects(,|,,)*)/g;
     
     const nameMatches = [...formattedStr.matchAll(regexName)];
     const detailMatches = [...formattedStr.matchAll(regexDetail)];
@@ -51,21 +49,42 @@ const scanPdf = async() => {
     const rd_2 = [...formattedStr.matchAll(regexDetail_2)]; const detailList_2: Partial<Record<MedicineDetails, string>>[] = [];
     const rd_3 = [...formattedStr.matchAll(regexDetail_3)]; const detailList_3: Partial<Record<MedicineDetails, string>>[] = [];
     const rd_4 = [...formattedStr.matchAll(regexDetail_4)]; const detailList_4: Partial<Record<MedicineDetails, string>>[] = [];
-    const rd_5 = [...formattedStr.matchAll(regexDetail_5)]; const detailList_5: Partial<Record<MedicineDetails, string>>[] = [];
-    const rd_6 = [...formattedStr.matchAll(regexDetail_6)]; const detailList_6: Partial<Record<MedicineDetails, string>>[] = [];
+    // const rd_5 = [...formattedStr.matchAll(regexDetail_5)]; const detailList_5: Partial<Record<MedicineDetails, string>>[] = [];
+    // const rd_6 = [...formattedStr.matchAll(regexDetail_6)]; const detailList_6: Partial<Record<MedicineDetails, string>>[] = [];
     
     const medicineNameList: MedicineName[] = [];
     const medicineDetailList: Partial<Record<MedicineDetails, string>>[] = [];
 
-    for (const match of nameMatches) {
+    const medicineList: Medicine[] = []; 
 
-      const medicineNameObj: MedicineName = {
-        name:  match[1],
-        pronounciation: match[2].replace(',', '').replace(',-', '-'),
-        type: match[3].trim(),
-      };
+    // ////////////////////////////
+    // figure out how to segment the pages using regex, then do a match based on each segment -- rather than scanning the entire document directly
 
-      medicineNameList.push(medicineNameObj);
+    for (const namematch of nameMatches) {
+
+      const medicine: Medicine = {
+        name: {
+          name: '',
+          pronounciation: '',
+          type: ''
+        }
+      }
+
+      for (const detailmatch of detailMatches) {
+        
+        medicine.name.name = namematch[1];
+        medicine.name.pronounciation = namematch[2].replace(',', '').replace(',-', '-');
+        medicine.name.type = namematch[3].trim();
+
+        medicine["Uses/Indications"] = detailmatch[1]  ?? 'No information provided';
+        medicine["Pharmacology/Actions"]= detailmatch[2] ?? 'No information provided';
+        medicine["Pharmacokinetics"]= detailmatch[3] ?? 'No information provided';
+        medicine["Contraindications/Precautions/Warnings"]= detailmatch[4] ?? 'No information provided';
+        medicine["Adverse Effects"]= detailmatch[5] ?? 'No information provided';
+        
+        break;
+      }
+      medicineList.push(medicine);
     }
     
     for (const match of rd_1) {
@@ -104,48 +123,17 @@ const scanPdf = async() => {
       detailList_4.push(detail);
     }
 
-
-    for (const match of rd_5) {
-
-      const detail: Partial<Record<MedicineDetails, string>> = {
-        "Adverse Effects":  match[1],
-      } as const;
-
-      detailList_5.push(detail);
-    }
-
-    for (const match of rd_6) {
-
-      const detail: Partial<Record<MedicineDetails, string>> = {
-        "Reproductive/Nursing Safety":  match[1],
-      } as const;
-
-      detailList_6.push(detail);
-    }
-
-
-
-    for (const match of detailMatches) {
-
-        const medicineDetail: Partial<Record<MedicineDetails, string>> = {
-        "Uses/Indications": match[1],
-        "Pharmacology/Actions": match[2],
-        "Pharmacokinetics": match[3],
-        "Contraindications/Precautions/Warnings": match[4],
-        "Adverse Effects": match[5],
-      } as const;
-
-      medicineDetailList.push(medicineDetail);
-    }
+    
 
 
     // for (let i = 0; i < Math.max(medicineDetailList.length, medicineNameList. length); i++) {
     //   console.log( medicineNameList[i], medicineDetailList[i] || 'NONE')
     // }
 
-    console.log(medicineNameList.length, medicineDetailList.length);
-    console.log(detailList_1.length);
-    console.log(detailList_2.length);
+    console.log(medicineList);
+    // console.log(medicineNameList.length, medicineDetailList.length);
+    // console.log(detailList_1.length);
+    // console.log(detailList_2.length);
     // console.log(detailList_3.length);
     // console.log(detailList_4.length);
     // console.log(detailList_5.length);
