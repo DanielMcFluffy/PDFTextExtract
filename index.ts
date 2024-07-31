@@ -2,37 +2,18 @@ import { getDocument } from "pdfjs-dist";
 import { TextContent, TextItem } from "pdfjs-dist/types/src/display/api";
 import { Medicine, MedicineDetails, MedicineName } from "./lib/models/medicine";
 
-const extractIndex = async(pdfUrl: string): Promise<TextContent[]> => {
+const extractRegexFromIndex = async(pdfUrl: string) => {
   const pdf = getDocument(pdfUrl).promise;
-  const textContentPromises = [];
+  const indexContentCollection = [];
   const parsedPdf = await pdf;
+
   for (let i = 13; i <= 28; i++) {
     const page = await parsedPdf.getPage(i);
     const pageContent = await page.getTextContent();
-    textContentPromises.push(pageContent)
+    indexContentCollection.push(pageContent)
   }
-  return textContentPromises;
-} 
-
-const extractText = async(pdfUrl: string): Promise<TextContent[]> => {
-  const pdf = getDocument(pdfUrl).promise;
-  const textContentPromises = [];
-  const parsedPdf = await pdf;
-  for (let i = 36; i <= 1000; i++) {
-    const page = await parsedPdf.getPage(i);
-    const pageContent = await page.getTextContent();
-    textContentPromises.push(pageContent)
-  }
-  return textContentPromises;
-} 
-
-const scanPdf = async() => {
-  const now = Date.now();
-  console.log(now);
-  try {
-    const indexContentCollection = await extractIndex('vet-handbook.pdf');
     // console.log(indexContentCollection);
-      const totalIndex: (string[])[] = []; 
+    const totalIndex: (string[])[] = []; 
     for (const indexContent of indexContentCollection) {
       const strInner: string[] = [];
       for (const textItem of indexContent.items) {
@@ -46,43 +27,57 @@ const scanPdf = async() => {
       .replace(/Contents,SYSTEMIC MONOGRAPHS,,/g, '')
       .replace(/,,/g, ', ')
       .replace(/,/g, ', ')
-    //this gives the index
-    const regexIndex = /\b[A-Z][a-z]*([-'\s][A-Z][a-z]*)*\b/g;
+      .replace(/APPENDIX,  Ophthalmic Products,  Routes of Administration for Ophthalmic Drugs,  Diagnostic Agents, Fluorescein Sodium, Lissamine Green, Phenol Red Thread,  Rose Bengal/g, '')
+      //this gives the index
 
-    const regexName = /([A-Z\s]+),,\(([^)]+-[^)]+)\).*?([A-Z\s\/]+)(?=((\)*),,)(Prescriber)*)/g;
+    const indexRegex = /[^,\s]+(?:\s[^,\s]+)*/g;
 
-    const nameMatches = [...formattedIndex.matchAll(regexName)];
-    const indexMatches = [...formattedIndex.matchAll(regexIndex)];
+    return [...formattedIndex.matchAll(indexRegex)]
+} 
 
-    const medicineNameList: MedicineName[] = [];
-    const medicineDetailList: Partial<Record<MedicineDetails, string>>[] = [];
-
-    const medicineList: Medicine[] = []; 
-
-    const textContentCollection = await extractText('vet-handbook.pdf');
-    const totalText: (string[])[] = []; 
-    for (const textContent of textContentCollection) {
-      const strInner: string[] = [];
-      for (const textItem of textContent.items) {
-        const item = textItem as TextItem;
-        strInner.push(item.str)
-      }
-      totalText.push(strInner)
-    }  
-    //format this to be used in the indexmatch loop
-    const formattedText = totalText.join(''); //raw text 
-      
-
-    for(const indexMatch of indexMatches) {
-
-    }
-    
-    console.log(formattedIndex);
-    console.log(Date.now());
-  } catch (error) {
-    console.error(error);
+const extractText = async(pdfUrl: string, start: number, end: number): Promise<TextContent[]> => {
+  const pdf = getDocument(pdfUrl).promise;
+  const textContentPromises = [];
+  const parsedPdf = await pdf;
+  for (let i = start; i <= end; i++) {
+    const page = await parsedPdf.getPage(i);
+    const pageContent = await page.getTextContent();
+    textContentPromises.push(pageContent)
   }
+  return textContentPromises;
+} 
+
+//will be something to be looped over different indexRegex
+//so each index corresponds to a page
+//figure out the end of the medicine section via regex (e.g. references section)
+//or maybe just find the first few subsection regex
+
+const indexToPage = async(indexRegex: RegExp, startPage: number, endPage: number) => {
+  const text = await extractText('vet-handbook.pdf', 1, 200); //this text collection will have the running total of all page content including its page number //find a way to match the indexRegex and output the page number that correspond to the match
+  //loop the below expression and compare it with the regex, once found, that would be the starting page -- important
+
+  const regexMedName = /.*\s+\(.+\)+.*(?=  Prescriber)/; //regex to be looped
+
+  const strPages: string[] = [];//running total -- find a way to map the matched regex to the index of this array
+
+  for (let i = (startPage - 1); i <= (endPage - 1); i++) {
+    const strPage: string[] = [];
+
+    text[i].items.forEach((x) => {
+      const text = x as unknown as TextItem;
+      strPage.push(text.str);
+    })
+
+    strPages.push(strPage.join(' '));
+  }
+
+  // strPages.forEach((pageText) => {
+
+  // })
+
+  console.log(strPages)
+  
 }
 
-scanPdf();
 
+extractRegexFromIndex('vet-handbook.pdf');
